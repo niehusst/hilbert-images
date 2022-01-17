@@ -3,6 +3,8 @@ from PIL import Image
 from scipy.io import wavfile
 import numpy as np
 import simpleaudio as sa
+import multiprocessing
+from threading import Thread
 
 imPath = "./cat.jpg"
 
@@ -116,13 +118,20 @@ def pixelToAmplitude(pixel):
     (r,g,b) = pixel
     return int(r) + int(g) + int(b)
 
+def createFreqsInRange(samples, freqs, start, end):
+    for i in range(start, end):
+        samples[i] += sum(map(lambda freq,amplitude: amplitude * np.sin(i * freq), enumerate(freqs)))
+
 def frequenciesToWav(freqs):
     # create sampling array to convert to audio
     sample_rate = 44100
     samples = np.zeros((sample_rate,))
-    for freq,amplitude in enumerate(freqs):
-        for i in range(sample_rate):
-            samples[i] += amplitude * np.sin(i * freq)
+    # multithreading bcus it takes forever otherwise
+    cpu_count = multiprocessing.cpu_count()
+    div = sample_rate / cpu_count
+    threads = [Thread(target=createFreqsInRange, args=(samples, freqs, int(i*div), int((i+1)*div))) for i in range(cpu_count)]
+    map(lambda t: t.start(), threads)
+    map(lambda t: t.join(), threads)
 
     # write to file
     fname = 'out.wav'
