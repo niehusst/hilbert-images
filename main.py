@@ -2,6 +2,7 @@ import math
 from PIL import Image
 from scipy.io import wavfile
 import numpy as np
+import simpleaudio as sa
 
 imPath = "./cat.jpg"
 
@@ -45,7 +46,6 @@ def hilbertKernel(mat, links, tl, br):
 # given num to find in adjacent spaces, return position of found num
 def findNumPos(mat, num, loc):
     if mat[loc] == num:
-        print('special base case')
         return loc
     h,w = mat.shape[:2]
     r = (loc[0]+1, loc[1])
@@ -109,32 +109,47 @@ def imageToFlatArray(image):
 
     return curvePath, debug
 
-def pixelToFreq(pixel):
+def pixelToAmplitude(pixel):
     # TODO: improve/finish
 # convert rgb to hex code number? but then red dominates other color amplitudes
 #    return int('%02x%02x%02x' % pixel, 16)
     (r,g,b) = pixel
-    return r + g + b
+    return int(r) + int(g) + int(b)
 
-def frequenciesToMp3(freqs):
+def frequenciesToWav(freqs):
+    # create sampling array to convert to audio
+    sample_rate = 44100
+    samples = np.zeros((sample_rate,))
+    for freq,amplitude in enumerate(freqs):
+        for i in range(sample_rate):
+            samples[i] += amplitude * np.sin(i * freq)
+
+    # write to file
     fname = 'out.wav'
-    wavfile.write(fname, 1, freqs)
+    wavfile.write(fname, sample_rate, samples)
     return fname
 
 def imageToSound(imagePath):
+    print('opening image')
     rawImage = Image.open(imagePath)
 
     # craft hilbert line path through image
-    arrangedPixels,_ = imageToFlatArray(image)
+    print('converting image to flat array')
+    arrangedPixels,_ = imageToFlatArray(rawImage)
 
     # convert pixel vals to audio frequencies
-    freqs = map(arrangedPixels, pixelToFreq)
+    print('map pixels to amplitudes')
+    freqs = map(pixelToAmplitude, arrangedPixels)
 
     # make actual sound file out of our construction
-    return frequenciesToMp3(freqs)
+    print('write to wav file')
+    return frequenciesToWav(freqs)
 
-# TODO: play audio
+# play audio
 audio_fname = imageToSound(imPath)
+wav_obj = sa.WaveObject.from_wave_file(audio_fname)
+play_obj = wav_obj.play()
+play_obj.wait_done()
 
 def hilbertTest():
     import matplotlib.pyplot as plt
