@@ -1,4 +1,6 @@
+import math
 from PIL import Image
+from scipy.io import wavfile
 import numpy as np
 
 imPath = "./cat.jpg"
@@ -19,6 +21,7 @@ def hilbertKernel(mat, links, tl, br):
     tl - tuple. top left coord of focussed sub-matrix of mat
     br - tuple. bottom right coord of focussed sub-matrix of mat
     """
+    if tl == br: raise Exception('hey!!')
     if (tl[0]+1, tl[1]+1) == br:
         # reached order1 pseudo hilbert curve, work already done
         return
@@ -57,7 +60,7 @@ def findNumPos(mat, num, loc):
         return u
     if loc[1]-1 >= 0 and mat[d] == num:
         return d
-    raise Exception(f"could not find {num} from {loc}:\n{mat}")
+    raise Exception(f"could not find {num} from {loc}")
 
 # use hilbert curves to make path through image
 def imageToFlatArray(image):
@@ -65,9 +68,9 @@ def imageToFlatArray(image):
     image = np.array(image)
     (height, width) = image.shape[:2]
     dim = max(width, height)
-    dim += dim % 4 # make sure dims are divis by 4
+    dim += abs(dim - 2**math.ceil(math.log(dim,2))) # make sure dims are powers of 2 TODO: can this be avoided? as with squareness?
     if not (dim == width == height):
-        image = np.pad(image, ((0, dim-width), (0, dim-height), (0,0)), mode='reflect')
+        image = np.pad(image, ((0, dim-width), (0, dim-height))+ (((0,0),)*(len(image.shape)-2)), mode='reflect')
 
     # clone image matrix to create path
     pathMat = np.array([[0]*dim for _ in range(dim)])
@@ -92,7 +95,6 @@ def imageToFlatArray(image):
     links[pathMat[curr]] = pathMat[curr]
     curvePath = []
     debug = [] # x,y values for plotting shape
-    print(links)
     while pathMat[curr] in links:
         # jump from end of last curve to next linked curve
         startVal = links[pathMat[curr]]
@@ -104,42 +106,42 @@ def imageToFlatArray(image):
             curr = findNumPos(pathMat, startVal + i, curr)
             curvePath.append(image[curr])
             debug.append(curr)
-        print(f"{curr} -> {pathMat[curr]}")
 
     return curvePath, debug
 
 def pixelToFreq(pixel):
     # TODO: improve/finish
 # convert rgb to hex code number? but then red dominates other color amplitudes
+#    return int('%02x%02x%02x' % pixel, 16)
     (r,g,b) = pixel
     return r + g + b
 
 def frequenciesToMp3(freqs):
-    pass
+    fname = 'out.wav'
+    wavfile.write(fname, 1, freqs)
+    return fname
 
 def imageToSound(imagePath):
     rawImage = Image.open(imagePath)
 
     # craft hilbert line path through image
-    arrangedPixels = imageToFlatArray(image)
+    arrangedPixels,_ = imageToFlatArray(image)
 
     # convert pixel vals to audio frequencies
     freqs = map(arrangedPixels, pixelToFreq)
 
-    # make actual sound out of our construction
-    audio = frequenciesToMp3(freqs)
+    # make actual sound file out of our construction
+    return frequenciesToMp3(freqs)
 
-    # TODO: play audio
-
-#imageToSound(imPath)
+# TODO: play audio
+audio_fname = imageToSound(imPath)
 
 def hilbertTest():
     import matplotlib.pyplot as plt
-    testIn = np.zeros((4,4))
+    testIn = np.zeros((8,8))
     actual,pts = imageToFlatArray(testIn)
-    print(actual)
     plt.plot(list(map(lambda x: x[0], pts)),
              list(map(lambda x: x[1], pts)))
     plt.show()
 
-hilbertTest()
+#hilbertTest()
