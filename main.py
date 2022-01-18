@@ -120,7 +120,7 @@ def pixelToAmplitude(pixel):
 
 def createFreqsInRange(samples, freqs, start, end):
     for i in range(start, end):
-        samples[i] += sum(map(lambda freq,amplitude: amplitude * np.sin(i * freq), enumerate(freqs)))
+        samples[i] = sum([amplitude * np.sin(i * freq) for freq,amplitude in enumerate(freqs)])
 
 def frequenciesToWav(freqs):
     # create sampling array to convert to audio
@@ -130,8 +130,10 @@ def frequenciesToWav(freqs):
     cpu_count = multiprocessing.cpu_count()
     div = sample_rate / cpu_count
     threads = [Thread(target=createFreqsInRange, args=(samples, freqs, int(i*div), int((i+1)*div))) for i in range(cpu_count)]
-    map(lambda t: t.start(), threads)
-    map(lambda t: t.join(), threads)
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     # write to file
     fname = 'out.wav'
@@ -148,7 +150,7 @@ def imageToSound(imagePath):
 
     # convert pixel vals to audio frequencies
     print('map pixels to amplitudes')
-    freqs = map(pixelToAmplitude, arrangedPixels)
+    freqs = list(map(pixelToAmplitude, arrangedPixels))
 
     # make actual sound file out of our construction
     print('write to wav file')
