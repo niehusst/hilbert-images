@@ -3,8 +3,9 @@ from PIL import Image
 from scipy.io import wavfile
 import numpy as np
 import simpleaudio as sa
-import multiprocessing
-from threading import Thread
+#import multiprocessing
+#from threading import Thread
+import pyopencl as cl
 
 imPath = "./cat.jpg"
 
@@ -118,26 +119,85 @@ def pixelToAmplitude(pixel):
     (r,g,b) = pixel
     return int(r) + int(g) + int(b)
 
-def createFreqsInRange(samples, freqs, start, end):
-    for i in range(start, end):
-        samples[i] = sum([amplitude * np.sin(i * freq) for freq,amplitude in enumerate(freqs)])
+# multithreading too slow
+#def threadedFreqsInRange(samples, freqs, start, end):
+#    for i in range(start, end):
+#        samples[i] = sum([amplitude * np.sin(i * freq) for freq,amplitude in enumerate(freqs)])
+
+def gpuSum(a_np, b_np):
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+    
+    mf = cl.mem_flags
+    a_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a_np)
+    b_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=b_np)
+    
+    prg = cl.Program(ctx, """
+    __kernel void sum(
+        __global const float *a_g, __global const float *b_g, __global float *res_g)
+    {
+      int gid = get_global_id(0);
+      res_g[gid] = a_g[gid] + b_g[gid];
+    }
+    """).build()
+    
+    res_g = cl.Buffer(ctx, mf.WRITE_ONLY, a_np.nbytes)
+    knl = prg.sum
+    knl(queue, a_np.shape, None, a_g, b_g, res_g)
+    
+    res_np = np.empty_like(a_np)
+    cl.enqueue_copy(queue, res_np, res_g)
+    return res_np
+
+def gpuGenerateWaveParts(samples, freqs):
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+    
+    mf = cl.mem_flags
+    freqs_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=freqs)
+    prg = cl.Program(ctx, """
+__kernel void wave(
+    __global const int *freqs_g, __global float **samples_g)
+{
+  int gid_r = get_global_id(0);
+  int gid_c = get_global_id(1);
+  samples_g[gid_r][gid_c] = ;
+}
+""").build()
+    
+    samples_g = cl.Buffer(ctx, mf.WRITE_ONLY, samples.nbytes)
+    wave_knl = prg.wave  # Use this Kernel object for repeated calls
+    wave_knl.set_args(freqs_g, samples_g)
+    
+    cl.enqueue_nd_range_kernel(queue, wave_knl, ???, None)
+    
+    samples_np = np.empty_like(samples)
+    cl.enqueue_copy(queue, samples_np, samples_g)
+    return samples_np
 
 def frequenciesToWav(freqs):
     # create sampling array to convert to audio
     sample_rate = 44100
-    samples = np.zeros((sample_rate,))
-    # multithreading bcus it takes forever otherwise
-    cpu_count = multiprocessing.cpu_count()
-    div = sample_rate / cpu_count
-    threads = [Thread(target=createFreqsInRange, args=(samples, freqs, int(i*div), int((i+1)*div))) for i in range(cpu_count)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    samples = np.zeros((sample_rate,)).astype(np.float32)
+
+    # multithreading bcus it takes forever (except that's too slow too)
+    # cpu_count = multiprocessing.cpu_count()
+    # div = sample_rate / cpu_count
+    # threads = [Thread(target=createFreqsInRange, args=(samples, freqs, int(i*div), int((i+1)*div))) for i in range(cpu_count)]
+    # for t in threads:
+    #     t.start()
+    # for t in threads:
+    #     t.join()
+
+# TODO: no, this is stupid. I cant store 1024^2 * 44100 array elements
+    samples = gpuGenerateWaveParts(samples, freqs.astype(np.int32))
+    while len(samples) > 1:
+        ret = gpuSum(samples[0], samples[1])
+        samples.append(ret)
 
     # write to file
     fname = 'out.wav'
-    wavfile.write(fname, sample_rate, samples)
+    wavfile.write(fname, sample_rate, samples[0])
     return fname
 
 def imageToSound(imagePath):

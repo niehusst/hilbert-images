@@ -6,6 +6,10 @@ Maybe this could give you a feeling of synesthesia or something.
 
 Idea from 3blue1brown on youtube: https://www.youtube.com/watch?v=3s7h2MHQtxc
 
+NOTE: installing pyopencl is a bit of a chore
+https://documen.tician.de/pyopencl/misc.html#installation
+and make sure the conda env where pyopencl was installed is active
+
 ## The initial concept: Image -> Sound
 Given an image, convert each pixel in that image to a number on the line between 1.0 and 0.0 based on position in the image.
 This is done using hilbert curves (not the exact thing, as those are infinite); a line following the shape of a hilbert curve is drawn through every pixel in the image. (Note: only works for square images?)
