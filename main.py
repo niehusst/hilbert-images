@@ -121,6 +121,7 @@ def pixelToAmplitude(pixel):
 
 # multithreading too slow
 #def threadedFreqsInRange(samples, freqs, start, end):
+#    """for each samples position, sum all wave forms for that sample position"""
 #    for i in range(start, end):
 #        samples[i] = sum([amplitude * np.sin(i * freq) for freq,amplitude in enumerate(freqs)])
 
@@ -149,29 +150,27 @@ def gpuSum(a_np, b_np):
     cl.enqueue_copy(queue, res_np, res_g)
     return res_np
 
-def gpuGenerateWaveParts(samples, freqs):
+def gpuGenerateWave(freq, amplitude, sample_rate):
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
     
     mf = cl.mem_flags
-    freqs_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=freqs)
     prg = cl.Program(ctx, """
 __kernel void wave(
-    __global const int *freqs_g, __global float **samples_g)
+    __global const int freq_g, __global int amplitude_g, __global const float *samples_g)
 {
-  int gid_r = get_global_id(0);
-  int gid_c = get_global_id(1);
-  samples_g[gid_r][gid_c] = ;
+  int gid = get_global_id(0);
+  samples_g[gid] = amplitude_g * sin(gid * freq_g);
 }
 """).build()
     
-    samples_g = cl.Buffer(ctx, mf.WRITE_ONLY, samples.nbytes)
+    samples_g = cl.Buffer(ctx, mf.WRITE_ONLY, sample_rate*8)
     wave_knl = prg.wave  # Use this Kernel object for repeated calls
-    wave_knl.set_args(freqs_g, samples_g)
+    wave_knl.set_args(freq, amplitude, samples_g)
     
-    cl.enqueue_nd_range_kernel(queue, wave_knl, ???, None)
+    cl.enqueue_nd_range_kernel(queue, wave_knl, (sample_rate,), None)
     
-    samples_np = np.empty_like(samples)
+    samples_np = np.empty(sample_rate)
     cl.enqueue_copy(queue, samples_np, samples_g)
     return samples_np
 
@@ -189,11 +188,17 @@ def frequenciesToWav(freqs):
     # for t in threads:
     #     t.join()
 
-# TODO: no, this is stupid. I cant store 1024^2 * 44100 array elements
-    samples = gpuGenerateWaveParts(samples, freqs.astype(np.int32))
-    while len(samples) > 1:
-        ret = gpuSum(samples[0], samples[1])
-        samples.append(ret)
+    # TODO: do some kind of producer consumer thread thing to accelerate this???
+    for freq, amplitude in enumerate(freqs):
+        start = time.time()
+        # gpu gen wave
+        wave = gpuGenerateWave(freq+1, amplitude, sample_rate)
+
+        # gpu sum waves
+        samples = gpuSum(samples, wave)
+        print(f"the elapsed time is: {time.time() - s}")
+        print(samples)
+        return
 
     # write to file
     fname = 'out.wav'
