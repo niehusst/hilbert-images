@@ -19,6 +19,8 @@ All the frequencies are then squished together into 1 wave form that represents 
 
 The benefit of using a hilbert curve, as opposed to just zigzagging through the pixels, is that high and low res versions of the same image will sound similar. 
 
+This however is super computation intensive and is on the order of O(nm) where n and m are the dims of the input image. To try to handle this, resizing the image to 512x512 or some other fixed size is probably the best option.
+
 ## The challenge: Sound -> Image
 In theory, it should be possible to reverse the above process and arrive back at the same (or at least hopefully similar) image.
 The parts of the above process that make that challenging are:

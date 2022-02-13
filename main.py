@@ -1,3 +1,4 @@
+import time
 import math
 from PIL import Image
 from scipy.io import wavfile
@@ -97,20 +98,20 @@ def imageToFlatArray(image):
     curr = (0,0)
     links[pathMat[curr]] = pathMat[curr]
     curvePath = []
-    debug = [] # x,y values for plotting shape
+#    debug = [] # x,y values for plotting shape
     while pathMat[curr] in links:
         # jump from end of last curve to next linked curve
         startVal = links[pathMat[curr]]
         curr = findNumPos(pathMat, startVal, curr)
         curvePath.append(image[curr])
-        debug.append(curr)
+#        debug.append(curr)
         # jump through the located order1 pseudo hilbert curve
         for i in range(1,4):
             curr = findNumPos(pathMat, startVal + i, curr)
             curvePath.append(image[curr])
-            debug.append(curr)
+#            debug.append(curr)
 
-    return curvePath, debug
+    return curvePath #, debug
 
 def pixelToAmplitude(pixel):
     # TODO: improve/finish
@@ -157,16 +158,16 @@ def gpuGenerateWave(freq, amplitude, sample_rate):
     mf = cl.mem_flags
     prg = cl.Program(ctx, """
 __kernel void wave(
-    __global const int freq_g, __global int amplitude_g, __global const float *samples_g)
+    const int freq_g, const int amplitude_g, __global float *samples_g)
 {
   int gid = get_global_id(0);
-  samples_g[gid] = amplitude_g * sin(gid * freq_g);
+  samples_g[gid] = amplitude_g * sin((float) gid * freq_g);
 }
 """).build()
     
     samples_g = cl.Buffer(ctx, mf.WRITE_ONLY, sample_rate*8)
     wave_knl = prg.wave  # Use this Kernel object for repeated calls
-    wave_knl.set_args(freq, amplitude, samples_g)
+    wave_knl.set_args(np.int32(freq), np.int32(amplitude), samples_g)
     
     cl.enqueue_nd_range_kernel(queue, wave_knl, (sample_rate,), None)
     
@@ -196,11 +197,12 @@ def frequenciesToWav(freqs):
 
         # gpu sum waves
         samples = gpuSum(samples, wave)
-        print(f"the elapsed time is: {time.time() - s}")
+        print(f"the elapsed time is: {time.time() - start}")
         print(samples)
         return
 
     # write to file
+    print("write wave to file")
     fname = 'out.wav'
     wavfile.write(fname, sample_rate, samples[0])
     return fname
@@ -211,14 +213,14 @@ def imageToSound(imagePath):
 
     # craft hilbert line path through image
     print('converting image to flat array')
-    arrangedPixels,_ = imageToFlatArray(rawImage)
+    arrangedPixels = imageToFlatArray(rawImage)
 
     # convert pixel vals to audio frequencies
     print('map pixels to amplitudes')
     freqs = list(map(pixelToAmplitude, arrangedPixels))
 
     # make actual sound file out of our construction
-    print('write to wav file')
+    print('make wave')
     return frequenciesToWav(freqs)
 
 # play audio
