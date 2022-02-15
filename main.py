@@ -191,29 +191,37 @@ def frequenciesToWav(freqs):
 
     # TODO: do some kind of producer consumer thread thing to accelerate this???
     for freq, amplitude in enumerate(freqs):
-        start = time.time()
+#        start = time.time()
         # gpu gen wave
         wave = gpuGenerateWave(freq+1, amplitude, sample_rate)
 
         # gpu sum waves
         samples = gpuSum(samples, wave)
-        print(f"the elapsed time is: {time.time() - start}")
-        print(samples)
-        return
+        if freq % (len(freqs)/10) == 0:
+            print(f"percent way {freq / (len(freqs)/10)}")
+            
+#        elapse = time.time() - start
+#        print(f"the elapsed time is: {elapse}")
+#        print((len(freqs) * elapse)/60)
+#        print(samples[len(samples)-5:])
+#        return
 
     # write to file
     print("write wave to file")
+    print(samples.shape)
     fname = 'out.wav'
-    wavfile.write(fname, sample_rate, samples[0])
+    wavfile.write(fname, sample_rate, samples.astype(np.int16))
     return fname
 
 def imageToSound(imagePath):
     print('opening image')
     rawImage = Image.open(imagePath)
+    # important: reshape to square of fixed size that wont kill runtime
+    resizedImage = rawImage.resize((128, 128))
 
     # craft hilbert line path through image
     print('converting image to flat array')
-    arrangedPixels = imageToFlatArray(rawImage)
+    arrangedPixels = imageToFlatArray(resizedImage)
 
     # convert pixel vals to audio frequencies
     print('map pixels to amplitudes')
