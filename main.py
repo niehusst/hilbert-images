@@ -191,24 +191,16 @@ def frequenciesToWav(freqs):
 
     # TODO: do some kind of producer consumer thread thing to accelerate this???
     for freq, amplitude in enumerate(freqs):
-#        start = time.time()
         # gpu gen wave
         wave = gpuGenerateWave(freq+1, amplitude, sample_rate)
 
         # gpu sum waves
         samples = gpuSum(samples, wave)
-        if freq % (len(freqs)/10) == 0:
-            print(f"percent way {freq / (len(freqs)/10)}")
-            
-#        elapse = time.time() - start
-#        print(f"the elapsed time is: {elapse}")
-#        print((len(freqs) * elapse)/60)
-#        print(samples[len(samples)-5:])
-#        return
+        if freq % (len(freqs)//10) == 0:
+            print(f"percent way {freq / (len(freqs)//10)}")
 
     # write to file
     print("write wave to file")
-    print(samples.shape)
     fname = 'out.wav'
     wavfile.write(fname, sample_rate, samples.astype(np.int16))
     return fname
